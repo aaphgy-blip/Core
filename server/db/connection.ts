@@ -43,6 +43,10 @@ class DatabaseClient {
         console.log(`[MongoDB] Servidor MongoDB local activo en: ${uri}`);
       }
 
+      if (!uri) {
+        throw new Error('Error al determinar la URI de conexión a MongoDB');
+      }
+
       console.log(`[MongoDB] Conectando a MongoDB: ${uri.replace(/\/\/[^@]+@/, '//***:***@')}...`);
       this.client = new MongoClient(uri, {
         connectTimeoutMS: 5000,
@@ -125,6 +129,17 @@ class DatabaseClient {
 
   private async seedIfEmpty(): Promise<void> {
     if (!this.db) return;
+
+    // Seed must NEVER run automatically in production unless explicitly enabled via ENABLE_SEED=true
+    if (config.nodeEnv === 'production' && process.env.ENABLE_SEED !== 'true') {
+      console.log('[MongoDB] Modo producción: siembra automática de semillas deshabilitada.');
+      return;
+    }
+
+    if (!config.enableSeed) {
+      console.log('[MongoDB] Siembra de semillas deshabilitada por configuración.');
+      return;
+    }
 
     try {
       const restCount = await this.getRestaurantsCollection().countDocuments();

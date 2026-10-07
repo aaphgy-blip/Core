@@ -57,28 +57,33 @@ npm install
 Crea tu archivo `.env`:
 ```env
 MONGODB_URI="mongodb://localhost:27017/directaurante_v2"
+# JWT_SECRET es estrictamente obligatorio en producción (el servidor se detiene si falta)
 JWT_SECRET="clave-secreta-directaurante-produccion-2026"
+CORS_ORIGIN="http://localhost:3000,http://127.0.0.1:3000"
+ENABLE_SEED="false"
 PORT=3000
 NODE_ENV="development"
 ```
 
-### 3. Ejecutar la suite de pruebas (24/24 pruebas reales)
+### 3. Ejecutar la suite de pruebas consolidada (30/30 pruebas)
 ```bash
 npm test
 ```
-*Las pruebas se ejecutan contra una instancia MongoDB real verificando persistencia, índices, RBAC, concurrencia y auditoría.*
+*Las pruebas se ejecutan contra una instancia MongoDB real verificando persistencia, índices, RBAC, ownership estricto en GET /orders/:id, seguridad JWT en producción, CORS configurado, seed condicional, concurrencia y auditoría.*
 
 ### 4. Iniciar en modo desarrollo
 ```bash
 npm run dev
 ```
-Servidor disponible en `http://localhost:3000`.
+Servidor y cliente unificados disponibles en `http://localhost:3000`.
 
 ### 5. Compilar y ejecutar para producción
+Compila el frontend a `dist/` y empaqueta el backend TypeScript con esbuild a `dist/server.js`:
 ```bash
 npm run build
 npm start
 ```
+*El comando `npm start` corre nativamente con Node (`node dist/server.js`) sin requerir runtime `tsx` en producción.*
 
 ---
 

@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/authMiddleware.ts';
 import { OrderService } from '../services/orderService.ts';
+import { RestaurantRepository } from '../repositories/restaurantRepository.ts';
 
 const router = Router();
 
@@ -9,7 +10,21 @@ router.use(authMiddleware);
 // GET /restaurant/orders
 router.get('/orders', async (req: AuthenticatedRequest, res: Response, next) => {
   try {
-    const restaurantId = (req.query.restaurant_id as string) || 'rest_tacos_guero';
+    let restaurantId = req.query.restaurant_id as string;
+    if (!restaurantId && req.user!.role === 'restaurant') {
+      const owned = await RestaurantRepository.findByOwnerId(req.user!.id);
+      if (owned) {
+        restaurantId = owned.id;
+      }
+    }
+
+    if (!restaurantId) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro restaurant_id es requerido para listar pedidos del establecimiento',
+      });
+    }
+
     const orders = await OrderService.listRestaurantOrders(restaurantId, {
       id: req.user!.id,
       role: req.user!.role,

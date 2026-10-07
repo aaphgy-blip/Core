@@ -1,5 +1,6 @@
 import { dbClient } from '../db/connection.ts';
 import { AuditLog } from '../models/types.ts';
+import crypto from 'crypto';
 
 export class AuditLogRepository {
   private static col() {
@@ -9,7 +10,7 @@ export class AuditLogRepository {
   public static async create(log: Omit<AuditLog, 'id' | 'timestamp'>): Promise<AuditLog> {
     const entry: AuditLog = {
       ...log,
-      id: `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: `audit_${crypto.randomUUID()}`,
       timestamp: new Date().toISOString(),
     };
     await this.col().insertOne(entry as any);

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { config } from './config/index.ts';
 import authRoutes from './routes/authRoutes.ts';
 import restaurantRoutes from './routes/restaurantRoutes.ts';
 import customerRoutes from './routes/customerRoutes.ts';
@@ -8,10 +9,46 @@ import restaurantPortalRoutes from './routes/restaurantPortalRoutes.ts';
 import { CatalogService } from './services/restaurantService.ts';
 import { errorHandler } from './middleware/errorHandler.ts';
 
+export function getCorsOptions(overrideOrigin?: string): cors.CorsOptions {
+  return {
+    origin: (origin, callback) => {
+      const activeCorsOrigin = overrideOrigin !== undefined ? overrideOrigin : config.corsOrigin;
+
+      // In development or test without explicit restrictions, allow all
+      if (config.nodeEnv !== 'production' && (!activeCorsOrigin || activeCorsOrigin === '*')) {
+        return callback(null, true);
+      }
+
+      if (activeCorsOrigin === '*') {
+        return callback(null, true);
+      }
+
+      const allowedOrigins = (activeCorsOrigin || '')
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean);
+
+      // Non-browser / same-origin requests (origin undefined) are permitted
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS policy: Origen '${origin}' no permitido por Directaurante Core V2`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-idempotency-key'],
+  };
+}
+
 export function createCoreApp() {
   const app = express();
 
-  app.use(cors());
+  app.use(cors(getCorsOptions()));
   app.use(express.json());
 
   // Health check

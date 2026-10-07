@@ -3,6 +3,7 @@ import { config } from '../config/index.ts';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/authMiddleware.ts';
 import { validateCreateOrder } from '../schemas/validation.ts';
 import { OrderService } from '../services/orderService.ts';
+import { RestaurantRepository } from '../repositories/restaurantRepository.ts';
 
 const router = Router();
 
@@ -58,8 +59,12 @@ router.get('/', async (req: AuthenticatedRequest, res: Response, next) => {
     const user = req.user!;
     let orders;
     if (user.role === 'restaurant') {
-      const rest = await OrderService.listRestaurantOrders(user.id, { id: user.id, role: user.role });
-      orders = rest;
+      const restOwner = await RestaurantRepository.findByOwnerId(user.id);
+      const restaurantId = (req.query.restaurant_id as string) || (restOwner ? restOwner.id : '');
+      if (!restaurantId) {
+        return res.status(400).json({ success: false, error: 'restaurant_id es requerido para listar pedidos de restaurante' });
+      }
+      orders = await OrderService.listRestaurantOrders(restaurantId, { id: user.id, role: user.role });
     } else {
       orders = await OrderService.listCustomerOrders(user.id);
     }

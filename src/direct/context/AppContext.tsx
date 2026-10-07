@@ -104,7 +104,7 @@ export const AppContextProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const addToast = (type: 'success' | 'error' | 'info', message: string) => {
-    const id = `toast_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
+    const id = `toast_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
     setToasts((prev) => [...prev, { id, type, message }]);
     setTimeout(() => {
       removeToast(id);

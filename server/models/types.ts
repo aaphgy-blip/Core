@@ -191,6 +191,7 @@ export interface Order {
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   status: OrderStatus;
+  driver_id?: string | null;
   has_allergies: boolean;
   allergies?: string;
   notes?: string;

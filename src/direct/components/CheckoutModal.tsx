@@ -78,7 +78,7 @@ export const CheckoutModal: React.FC = () => {
     }));
 
     // Generate idempotency key for network safety & duplicate protection
-    const idempotencyKey = `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const idempotencyKey = `idemp_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
 
     const orderPayload = {
       restaurant_id: cartRestaurant.id,

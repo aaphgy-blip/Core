@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/index.ts';
@@ -14,7 +15,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const userId = `usr_${crypto.randomUUID()}`;
 
     // Critical security constraint: Public registration strictly creates CUSTOMER
     const newUser: User = {
@@ -52,7 +53,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const userId = `usr_${dto.role}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const userId = `usr_${dto.role}_${crypto.randomUUID()}`;
 
     const newUser: User = {
       id: userId,

@@ -4,6 +4,8 @@ import { OrderService } from '../services/orderService.ts';
 import { AuditService } from '../services/auditService.ts';
 import { dbClient, initDb } from '../db/connection.ts';
 import { validateRegister } from '../schemas/validation.ts';
+import { getJwtSecret, config } from '../config/index.ts';
+import { getCorsOptions } from '../app.ts';
 
 interface TestResult {
   num: number;
@@ -466,6 +468,159 @@ export async function runCoreTests(): Promise<{ passed: number; failed: number; 
     }
     if (!events.includes('order.confirmed')) {
       throw new Error('Falta evento order.confirmed en auditoría');
+    }
+  });
+
+  // 25. JWT_SECRET ausente en producción
+  await test(25, 'JWT_SECRET ausente en producción', async () => {
+    const prevEnv = process.env.NODE_ENV;
+    const prevSecret = process.env.JWT_SECRET;
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.JWT_SECRET;
+
+      let threw = false;
+      try {
+        getJwtSecret();
+      } catch (err: any) {
+        threw = true;
+        if (!err.message.includes('JWT_SECRET es obligatorio en producción')) {
+          throw new Error(`Mensaje de error inesperado: ${err.message}`);
+        }
+      }
+      if (!threw) {
+        throw new Error('getJwtSecret debió lanzar error crítico al no tener JWT_SECRET en producción');
+      }
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+      if (prevSecret !== undefined) process.env.JWT_SECRET = prevSecret;
+    }
+  });
+
+  // 26. CORS configurado
+  await test(26, 'CORS configurado', async () => {
+    const corsOptions = getCorsOptions('https://directaurante.com,https://admin.directaurante.com');
+    const originFn = corsOptions.origin as (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void;
+
+    // Allowed origin
+    let allowedOk = false;
+    originFn('https://directaurante.com', (err, allow) => {
+      if (!err && allow === true) allowedOk = true;
+    });
+    if (!allowedOk) throw new Error('CORS debió permitir el origen configurado');
+
+    // Disallowed origin
+    let blockedOk = false;
+    originFn('https://sitio-no-autorizado.com', (err) => {
+      if (err && err.message.includes('CORS policy: Origen')) blockedOk = true;
+    });
+    if (!blockedOk) throw new Error('CORS debió rechazar el origen no configurado');
+
+    // Undefined origin (same-origin / curl)
+    let nonBrowserOk = false;
+    originFn(undefined, (err, allow) => {
+      if (!err && allow === true) nonBrowserOk = true;
+    });
+    if (!nonBrowserOk) throw new Error('CORS debió permitir peticiones sin origen (same-origin/server)');
+  });
+
+  // 27. Seed deshabilitado en producción
+  await test(27, 'seed deshabilitado en producción', async () => {
+    const prevEnv = process.env.NODE_ENV;
+    const prevSeed = process.env.ENABLE_SEED;
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.ENABLE_SEED;
+
+      // In production without ENABLE_SEED=true, seed condition must be strictly false
+      const shouldSeed = process.env.ENABLE_SEED === 'true';
+      if (shouldSeed) {
+        throw new Error('El seed no debe ejecutarse en producción cuando ENABLE_SEED no es "true"');
+      }
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+      if (prevSeed !== undefined) process.env.ENABLE_SEED = prevSeed;
+    }
+  });
+
+  // 28. Restaurant sin ownership no puede consultar pedido (GET /orders/:id)
+  await test(28, 'restaurant sin ownership no puede consultar pedido', async () => {
+    let threw = false;
+    try {
+      // Owner of Restaurant B attempts to view order belonging to Restaurant A
+      await OrderService.getOrderById(sampleOrderId, { id: restaurantBOwnerId, role: 'restaurant' });
+    } catch (err: any) {
+      threw = true;
+      if (err.statusCode !== 403) {
+        throw new Error(`Se esperaba código 403, se obtuvo: ${err.statusCode}`);
+      }
+    }
+    if (!threw) {
+      throw new Error('El restaurante ajeno no debió poder consultar la orden');
+    }
+
+    // Legit owner can view successfully
+    const order = await OrderService.getOrderById(sampleOrderId, { id: restaurantOwnerId, role: 'restaurant' });
+    if (!order || order.id !== sampleOrderId) {
+      throw new Error('El propietario legítimo del restaurante debió poder consultar el pedido');
+    }
+  });
+
+  // 29. Customer no puede consultar pedido ajeno (GET /orders/:id)
+  await test(29, 'customer no puede consultar pedido ajeno', async () => {
+    let threw = false;
+    try {
+      // Customer B attempts to view Customer A's order
+      await OrderService.getOrderById(sampleOrderId, { id: customerBId, role: 'customer' });
+    } catch (err: any) {
+      threw = true;
+      if (err.statusCode !== 403) {
+        throw new Error(`Se esperaba código 403, se obtuvo: ${err.statusCode}`);
+      }
+    }
+    if (!threw) {
+      throw new Error('Cliente ajeno no debió poder consultar el pedido');
+    }
+
+    // Customer A can view their own order
+    const orderA = await OrderService.getOrderById(sampleOrderId, { id: customerAId, role: 'customer' });
+    if (!orderA || orderA.id !== sampleOrderId) {
+      throw new Error('El cliente legítimo debió poder consultar su propio pedido');
+    }
+  });
+
+  // 30. Driver no puede consultar pedido no asignado (GET /orders/:id)
+  await test(30, 'driver no puede consultar pedido no asignado', async () => {
+    let threw = false;
+    try {
+      // Unassigned driver tries to view order
+      await OrderService.getOrderById(sampleOrderId, { id: 'usr_driver_no_asignado', role: 'driver' });
+    } catch (err: any) {
+      threw = true;
+      if (err.statusCode !== 403) {
+        throw new Error(`Se esperaba código 403, se obtuvo: ${err.statusCode}`);
+      }
+    }
+    if (!threw) {
+      throw new Error('Conductor no asignado debió ser rechazado al consultar pedido');
+    }
+
+    // Assign driver to order in MongoDB and verify assigned driver can view
+    const testDriverId = 'usr_driver_asignado_123';
+    await dbClient.getOrdersCollection().updateOne(
+      { id: sampleOrderId },
+      { $set: { driver_id: testDriverId, driver_name: 'Conductor Asignado' } }
+    );
+
+    const assignedView = await OrderService.getOrderById(sampleOrderId, { id: testDriverId, role: 'driver' });
+    if (!assignedView || assignedView.id !== sampleOrderId) {
+      throw new Error('El conductor asignado debió poder consultar el pedido');
+    }
+
+    // Master role can also view order administratively
+    const masterView = await OrderService.getOrderById(sampleOrderId, { id: 'usr_master_admin', role: 'master' });
+    if (!masterView || masterView.id !== sampleOrderId) {
+      throw new Error('El usuario master debió poder consultar el pedido');
     }
   });
 

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { AddressRepository } from '../repositories/addressRepository.ts';
 import { Address } from '../models/types.ts';
 import { CreateAddressDto } from '../schemas/validation.ts';
@@ -9,7 +10,7 @@ export class CustomerService {
   }
 
   public static async createAddress(userId: string, dto: CreateAddressDto): Promise<Address> {
-    const addressId = `addr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const addressId = `addr_${crypto.randomUUID()}`;
     const userAddresses = await AddressRepository.findByUserId(userId);
     const isFirst = userAddresses.length === 0;
 

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { config } from '../config/index.ts';
 import { UserRepository } from '../repositories/userRepository.ts';
 import { RestaurantRepository } from '../repositories/restaurantRepository.ts';
@@ -201,8 +202,8 @@ export class OrderService {
       throw new Error(`El pedido no alcanza el monto mínimo de entrega de $${minPesos} MXN`);
     }
 
-    const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const idempotencyKey = dto.idempotency_key || `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const orderId = `ord_${crypto.randomUUID()}`;
+    const idempotencyKey = dto.idempotency_key || `idemp_${crypto.randomUUID()}`;
 
     const newOrder: Order = {
       id: orderId,
@@ -273,7 +274,7 @@ export class OrderService {
     if (!order) return null;
 
     // RBAC & Ownership check
-    this.assertCanViewOrder(order, actor);
+    await this.assertCanViewOrder(order, actor);
 
     return order;
   }
@@ -359,7 +360,7 @@ export class OrderService {
 
   // --- Ownership and RBAC Check Helpers ---
 
-  public static assertCanViewOrder(order: Order, actor: { id: string; role: string }): void {
+  public static async assertCanViewOrder(order: Order, actor: { id: string; role: string }): Promise<void> {
     if (actor.role === 'master') return;
 
     if (actor.role === 'customer') {
@@ -372,18 +373,27 @@ export class OrderService {
     }
 
     if (actor.role === 'restaurant') {
-      // Must own the restaurant
+      const rest = await RestaurantRepository.findByOwnerId(actor.id);
+      if (!rest || rest.id !== order.restaurant_id) {
+        const error: any = new Error('Acceso denegado: no tienes permiso para consultar pedidos de este restaurante');
+        error.statusCode = 403;
+        throw error;
+      }
       return;
     }
 
     if (actor.role === 'driver') {
-      // Driver can only view if assigned
-      if ((order as any).driver_id && (order as any).driver_id !== actor.id) {
+      if (!order.driver_id || order.driver_id !== actor.id) {
         const error: any = new Error('Acceso denegado: este pedido no está asignado a tu conductor');
         error.statusCode = 403;
         throw error;
       }
+      return;
     }
+
+    const error: any = new Error('Acceso denegado: rol desconocido o sin permisos para consultar este pedido');
+    error.statusCode = 403;
+    throw error;
   }
 
   private static async assertCanTransitionStatus(
