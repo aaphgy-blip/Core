@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: directaurante_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: directaurante_v2
+    volumes:
+      - mongodb_data:/data/db
+
+  directaurante-core:
+    build: .
+    container_name: directaurante_core_v2
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongodb:27017/directaurante_v2
+      - JWT_SECRET=directaurante-core-v2-production-secret-change-me
+    depends_on:
+      - mongodb
+
+volumes:
+  mongodb_data:
